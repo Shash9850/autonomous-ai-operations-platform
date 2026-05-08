@@ -13,6 +13,9 @@ from app.api.schemas import TaskResponse
 
 from app.agents.workflow import build_workflow
 
+from app.analytics.session_store import LATEST_DATASET
+import app.analytics.session_store as session_store
+
 router = APIRouter()
 
 workflow = build_workflow()
@@ -75,6 +78,7 @@ async def stream_task(request: TaskRequest):
     )
 
 
+
 @router.post("/upload-document")
 
 async def upload_document(file: UploadFile = File(...)):
@@ -85,9 +89,26 @@ async def upload_document(file: UploadFile = File(...)):
 
         shutil.copyfileobj(file.file, buffer)
 
-    result = ingest_document(file_path)
+    # PDF → RAG ingestion
+    if file.filename.endswith(".pdf"):
+
+        result = ingest_document(file_path)
+
+    # CSV/XLSX → analytics storage only
+    elif file.filename.endswith((".csv", ".xlsx")):
+
+        session_store.LATEST_DATASET = file_path
+
+        result = "Dataset uploaded successfully"
+
+    else:
+
+        return {
+            "error": "Unsupported file type"
+        }
 
     return {
         "message": result,
-        "filename": file.filename
+        "filename": file.filename,
+        "file_path": file_path
     }

@@ -31,3 +31,6 @@ def get_planner_llm():
             model="mixtral-8x7b-32768",
             temperature=0
         )
+
+
+llm = get_planner_llm()

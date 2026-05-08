@@ -9,3 +9,4 @@ class AgentState(TypedDict):
     results: List[str]
     final_response: str
     chat_history: list
+    uploaded_file: str

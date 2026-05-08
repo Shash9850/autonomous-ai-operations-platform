@@ -17,6 +17,17 @@ def supervisor_agent(state):
         "projects"
     ]
 
+    analytics_keywords = [
+    "csv",
+    "excel",
+    "dataset",
+    "data",
+    "analyze",
+    "analysis",
+    "report"
+    ]
+
+
     memory_keywords = [
         "remember",
         "memory"
@@ -29,6 +40,10 @@ def supervisor_agent(state):
     elif any(word in task for word in memory_keywords):
 
         route = "memory"
+
+    elif any(word in combined_context for word in analytics_keywords):
+
+        route = "analytics"
 
     elif any(word in task for word in [
     "research",
