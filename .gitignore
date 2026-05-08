@@ -18,3 +18,13 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+
+# Uploaded docs
+backend/storage/docs/
+
+# Vector DB
+backend/storage/vectorstore/
+
+# Sample docs
+backend/sample.pdf
