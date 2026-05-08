@@ -1,6 +1,7 @@
 import os
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import settings
 
@@ -22,6 +23,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.mount(
+    "/storage",
+    StaticFiles(directory="storage"),
+    name="storage"
 )
 
 app.include_router(router)

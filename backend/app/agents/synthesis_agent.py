@@ -1,4 +1,7 @@
+from urllib import response
+
 from app.core.llm import get_planner_llm
+from app.agents import state
 
 
 def synthesis_agent(state):
@@ -37,7 +40,9 @@ Generate a polished final answer.
     updated_history.append(f"AI: {response.content}")
 
     return {
-        **state,
-        "final_response": response.content,
-        "chat_history": updated_history
-    }
+    **state,
+    "final_response": response.content,
+    "chat_history": updated_history,
+    "chart_path": state.get("chart_path"),
+    "report_path": state.get("report_path")
+}
