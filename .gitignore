@@ -1,0 +1,20 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Vector DB
+storage/vectorstore/
+
+# Node
+node_modules/
+
+# React build
+build/
+
+# OS
+.DS_Store
+Thumbs.db

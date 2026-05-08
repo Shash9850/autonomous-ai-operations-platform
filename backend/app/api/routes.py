@@ -1,0 +1,93 @@
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from fastapi import UploadFile, File
+import shutil
+
+from app.rag.ingest import ingest_document
+
+import asyncio
+import json
+
+from app.api.schemas import TaskRequest
+from app.api.schemas import TaskResponse
+
+from app.agents.workflow import build_workflow
+
+router = APIRouter()
+
+workflow = build_workflow()
+
+
+@router.post("/run-task", response_model=TaskResponse)
+async def run_task(request: TaskRequest):
+
+    result = workflow.invoke({
+        "task": request.task,
+        "route": "",
+        "plan": [],
+        "current_step": 0,
+        "results": [],
+        "final_response": "",
+        "chat_history": []
+    })
+
+    return result
+
+
+async def stream_workflow(task: str):
+
+    yield f"data: Starting task: {task}\n\n"
+
+    await asyncio.sleep(1)
+
+    yield "data: Supervisor routing...\n\n"
+
+    await asyncio.sleep(1)
+
+    yield "data: Planner generating execution plan...\n\n"
+
+    await asyncio.sleep(1)
+
+    yield "data: Executor calling tools...\n\n"
+
+    await asyncio.sleep(1)
+
+    result = workflow.invoke({
+        "task": task,
+        "route": "",
+        "plan": [],
+        "current_step": 0,
+        "results": [],
+        "final_response": ""
+    })
+
+    yield f"data: {json.dumps(result)}\n\n"
+
+    yield "data: TASK_COMPLETE\n\n"
+
+
+@router.post("/stream-task")
+async def stream_task(request: TaskRequest):
+
+    return StreamingResponse(
+        stream_workflow(request.task),
+        media_type="text/event-stream"
+    )
+
+
+@router.post("/upload-document")
+
+async def upload_document(file: UploadFile = File(...)):
+
+    file_path = f"storage/docs/{file.filename}"
+
+    with open(file_path, "wb") as buffer:
+
+        shutil.copyfileobj(file.file, buffer)
+
+    result = ingest_document(file_path)
+
+    return {
+        "message": result,
+        "filename": file.filename
+    }

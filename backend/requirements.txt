@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+langchain
+langgraph
+openai
+groq
+python-dotenv
+faiss-cpu
+tiktoken
+pydantic
+requests
