@@ -4,6 +4,7 @@ from typing import List
 
 class TaskRequest(BaseModel):
     task: str
+    recipient_email: str | None = None
 
 class TaskResponse(BaseModel):
 

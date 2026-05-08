@@ -12,3 +12,4 @@ class AgentState(TypedDict):
     uploaded_file: str
     chart_path: str
     report_path: str
+    recipient_email: str

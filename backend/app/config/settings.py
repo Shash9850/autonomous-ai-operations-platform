@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Settings:
 
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -16,5 +17,10 @@ class Settings:
     LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2")
 
     LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT")
+
+    EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+
+    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 
 settings = Settings()

@@ -37,7 +37,7 @@ async def run_task(request: TaskRequest):
     return result
 
 
-async def stream_workflow(task: str):
+async def stream_workflow(task: str,recipient_email: str = None):
 
     yield f"data: Starting task: {task}\n\n"
 
@@ -61,7 +61,8 @@ async def stream_workflow(task: str):
         "plan": [],
         "current_step": 0,
         "results": [],
-        "final_response": ""
+        "final_response": "",
+        "recipient_email": recipient_email
     })
 
     yield f"data: {json.dumps(result)}\n\n"
@@ -73,9 +74,11 @@ async def stream_workflow(task: str):
 async def stream_task(request: TaskRequest):
 
     return StreamingResponse(
-        stream_workflow(request.task),
+        stream_workflow(request.task,request.recipient_email),
         media_type="text/event-stream"
     )
+
+
 
 
 
