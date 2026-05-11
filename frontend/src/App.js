@@ -9,7 +9,12 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import {
   FiPaperclip,
-  FiSend
+  FiSend,
+  FiTrash2,
+  FiEdit2,
+  FiSearch,
+  FiStar,
+  FiDownload
 } from "react-icons/fi";
 
 function App() {
@@ -30,19 +35,48 @@ function App() {
 
   const bottomRef = useRef(null);
 
-const [chatSessions, setChatSessions] = useState([
-  {
-    id: 1,
-    title: "New Chat",
-    messages: []
-  }
+const [chatSessions, setChatSessions] = useState(() => {
 
-]);
+  const savedChats = localStorage.getItem("chatSessions");
 
-const [activeChatId, setActiveChatId] = useState(1);
+  return savedChats
+    ? JSON.parse(savedChats)
+    : [
+        {
+          id: 1,
+          title: "New Chat",
+          messages: []
+        }
+      ];
+
+});
+
+const [activeChatId, setActiveChatId] = useState(() => {
+
+  return Number(
+    localStorage.getItem("activeChatId")
+  ) || 1;
+
+});
+
+const [editingChatId, setEditingChatId] = useState(null);
+
+const [editedTitle, setEditedTitle] = useState("");
+
+const [searchQuery, setSearchQuery] = useState("");
 
 const activeChat = chatSessions.find(
   chat => chat.id === activeChatId
+);
+
+const filteredChats = chatSessions.filter(chat =>
+
+  chat.title
+    .toLowerCase()
+    .includes(
+      searchQuery.toLowerCase()
+    )
+
 );
 
 const updateActiveChatMessages = (newMessages) => {
@@ -64,6 +98,39 @@ const updateActiveChatMessages = (newMessages) => {
     )
 
   );
+
+};
+
+const exportChat = (chat) => {
+
+  const content = chat.messages
+
+    .map(msg =>
+
+      `${msg.role.toUpperCase()}:\n${msg.content}\n`
+
+    )
+
+    .join("\n-------------------\n\n");
+
+  const blob = new Blob(
+    [content],
+    { type: "text/plain" }
+  );
+
+  const url =
+    window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+
+  a.href = url;
+
+  a.download =
+    `${chat.title || "chat"}.txt`;
+
+  a.click();
+
+  window.URL.revokeObjectURL(url);
 
 };
 
@@ -119,6 +186,27 @@ const updateActiveChatMessages = (newMessages) => {
     ];
 
     updateActiveChatMessages(updatedMessages);
+
+    setChatSessions(prev =>
+
+  prev.map(chat =>
+
+    chat.id === activeChatId &&
+    chat.title === "New Chat"
+
+      ? {
+          ...chat,
+          title:
+            task.length > 40
+              ? task.slice(0, 40) + "..."
+              : task
+        }
+
+      : chat
+
+  )
+
+);
 
     try {
 
@@ -240,6 +328,26 @@ useEffect(() => {
 
 }, [activeChat.messages, streamLogs]);
 
+
+useEffect(() => {
+
+  localStorage.setItem(
+    "chatSessions",
+    JSON.stringify(chatSessions)
+  );
+
+}, [chatSessions]);
+
+
+useEffect(() => {
+
+  localStorage.setItem(
+    "activeChatId",
+    activeChatId
+  );
+
+}, [activeChatId]);
+
   return (
 
     <div className="min-h-screen bg-slate-900 text-white p-8 pb-40">
@@ -253,10 +361,12 @@ useEffect(() => {
       onClick={() => {
 
         const newChat = {
-          id: Date.now(),
-          title: "New Chat",
-          messages: []
-        };
+  id: Date.now(),
+  title: "New Chat",
+  messages: [],
+  pinned: false
+};
+
 
         setChatSessions(prev => [
           newChat,
@@ -274,27 +384,226 @@ useEffect(() => {
 
     </button>
 
+    <div className="relative mb-4">
+
+  <FiSearch
+    className="absolute left-3 top-3 text-slate-400"
+    size={18}
+  />
+
+  <input
+    type="text"
+    placeholder="Search chats..."
+    value={searchQuery}
+    onChange={(e) =>
+      setSearchQuery(e.target.value)
+    }
+    className="w-full bg-slate-800 text-white pl-10 pr-4 py-3 rounded-xl outline-none"
+  />
+
+</div>
+
     <div className="space-y-3">
 
-      {chatSessions.map(chat => (
+      {filteredChats.map(chat => (
+<div
 
-        <div
+  key={chat.id}
 
-          key={chat.id}
+  className={`p-3 rounded-xl transition flex items-center justify-between ${
+    activeChatId === chat.id
+      ? "bg-slate-700"
+      : "bg-slate-800 hover:bg-slate-700"
+  }`}
+>
 
-          onClick={() => setActiveChatId(chat.id)}
+  <div className="flex items-center flex-1 gap-2">
 
-          className={`p-3 rounded-xl cursor-pointer transition ${
-            activeChatId === chat.id
-              ? "bg-slate-700"
-              : "bg-slate-800 hover:bg-slate-700"
-          }`}
-        >
+    {editingChatId === chat.id ? (
 
-          {chat.title}
+      <input
 
-        </div>
+        value={editedTitle}
 
+        autoFocus
+
+        onChange={(e) =>
+          setEditedTitle(e.target.value)
+        }
+
+        onBlur={() => {
+
+          setChatSessions(prev =>
+
+            prev.map(c =>
+
+              c.id === chat.id
+                ? {
+                    ...c,
+                    title:
+                      editedTitle || "Untitled Chat"
+                  }
+                : c
+
+            )
+
+          );
+
+          setEditingChatId(null);
+
+        }}
+
+        onKeyDown={(e) => {
+
+          if (e.key === "Enter") {
+
+            e.target.blur();
+
+          }
+
+        }}
+
+        className="bg-slate-700 text-white px-2 py-1 rounded w-full outline-none"
+
+      />
+
+    ) : (
+
+      <span
+        className="cursor-pointer flex-1"
+        onClick={() => setActiveChatId(chat.id)}
+      >
+        {chat.title}
+      </span>
+
+    )}
+
+  </div>
+
+  <div className="flex items-center ml-2">
+
+    <button
+
+  onClick={() => exportChat(chat)}
+
+  className="text-slate-400 hover:text-green-400 transition mr-2"
+>
+
+  <FiDownload size={16} />
+
+</button>
+
+    <button
+
+  onClick={() => {
+
+    setChatSessions(prev =>
+
+      prev.map(c =>
+
+        c.id === chat.id
+          ? {
+              ...c,
+              pinned: !c.pinned
+            }
+          : c
+
+      )
+
+    );
+
+  }}
+
+  className={`transition mr-2 ${
+    chat.pinned
+      ? "text-yellow-400"
+      : "text-slate-400 hover:text-yellow-400"
+  }`}
+>
+
+  <FiStar size={16} />
+
+</button>
+    <button
+
+      onClick={() => {
+
+        setEditingChatId(chat.id);
+
+        setEditedTitle(chat.title);
+
+      }}
+
+      className="text-slate-400 hover:text-blue-400 transition mr-2"
+    >
+
+      <FiEdit2 size={16} />
+
+    </button>
+
+    <button
+
+      onClick={() => {
+
+       const filteredChats = chatSessions
+  .filter(chat =>
+
+    chat.title
+      .toLowerCase()
+      .includes(
+        searchQuery.toLowerCase()
+      )
+
+  )
+  .sort((a, b) => {
+
+    if (a.pinned && !b.pinned) return -1;
+
+    if (!a.pinned && b.pinned) return 1;
+
+    return 0;
+
+  });
+
+        if (filteredChats.length === 0) {
+
+          const newChat = {
+  id: Date.now(),
+  title: "New Chat",
+  messages: [],
+  pinned: false
+};
+
+          setChatSessions([newChat]);
+
+          setActiveChatId(newChat.id);
+
+        } else {
+
+          setChatSessions(filteredChats);
+
+          if (activeChatId === chat.id) {
+
+            setActiveChatId(
+              filteredChats[0].id
+            );
+
+          }
+
+        }
+
+      }}
+
+      className="text-slate-400 hover:text-red-400 transition"
+    >
+
+      <FiTrash2 size={16} />
+
+    </button>
+
+  </div>
+
+</div>
       ))}
 
     </div>
