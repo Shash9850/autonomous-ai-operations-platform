@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import {
@@ -14,199 +13,397 @@ import {
   FiEdit2,
   FiSearch,
   FiStar,
-  FiDownload
+  FiDownload,
+  FiLogOut
 } from "react-icons/fi";
 
 function App() {
 
   const [task, setTask] = useState("");
-
-
-
   const [response, setResponse] = useState(null);
-
   const [loading, setLoading] = useState(false);
-
   const [streamLogs, setStreamLogs] = useState([]);
-
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const [recipientEmail, setRecipientEmail] = useState("");
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false);
+
+  const [authMode, setAuthMode] =
+    useState("login");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [chatSessions, setChatSessions] =
+    useState([]);
+
+  const [activeChatId, setActiveChatId] =
+    useState(null);
+
+  const [editingChatId, setEditingChatId] =
+    useState(null);
+
+  const [editedTitle, setEditedTitle] =
+    useState("");
+
+  const [searchQuery, setSearchQuery] =
+    useState("");
 
   const bottomRef = useRef(null);
 
-const [chatSessions, setChatSessions] = useState(() => {
+  const token =
+    localStorage.getItem("token");
 
-  const savedChats = localStorage.getItem("chatSessions");
+  const authHeaders = {
+    Authorization: `Bearer ${token}`
+  };
 
-  return savedChats
-    ? JSON.parse(savedChats)
-    : [
-        {
-          id: 1,
-          title: "New Chat",
-          messages: []
-        }
-      ];
+  const activeChat =
+    chatSessions.find(
+      chat => chat.id === activeChatId
+    ) || {
+      messages: []
+    };
 
-});
-
-const [activeChatId, setActiveChatId] = useState(() => {
-
-  return Number(
-    localStorage.getItem("activeChatId")
-  ) || 1;
-
-});
-
-const [editingChatId, setEditingChatId] = useState(null);
-
-const [editedTitle, setEditedTitle] = useState("");
-
-const [searchQuery, setSearchQuery] = useState("");
-
-const activeChat = chatSessions.find(
-  chat => chat.id === activeChatId
-);
-
-const filteredChats = chatSessions.filter(chat =>
-
-  chat.title
-    .toLowerCase()
-    .includes(
-      searchQuery.toLowerCase()
+  const filteredChats = chatSessions
+    .filter(chat =>
+      chat.title
+        .toLowerCase()
+        .includes(
+          searchQuery.toLowerCase()
+        )
     )
+    .sort((a, b) => {
 
-);
+      if (a.pinned && !b.pinned) return -1;
 
-const updateActiveChatMessages = (newMessages) => {
+      if (!a.pinned && b.pinned) return 1;
 
-  setChatSessions(prev =>
+      return 0;
 
-    prev.map(chat =>
+    });
 
-      chat.id === activeChatId
-        ? {
-            ...chat,
-            messages:
-              typeof newMessages === "function"
-                ? newMessages(chat.messages)
-                : newMessages
-          }
-        : chat
+  const updateActiveChatMessages = (
+    newMessages
+  ) => {
 
-    )
+    setChatSessions(prev =>
 
-  );
+      prev.map(chat =>
 
-};
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              messages:
+                typeof newMessages === "function"
+                  ? newMessages(chat.messages)
+                  : newMessages
+            }
+          : chat
 
-const exportChat = (chat) => {
+      )
 
-  const content = chat.messages
+    );
 
-    .map(msg =>
+  };
 
-      `${msg.role.toUpperCase()}:\n${msg.content}\n`
+  const exportChat = (chat) => {
 
-    )
+    const content = chat.messages
+      .map(msg =>
+        `${msg.role.toUpperCase()}:\n${msg.content}\n`
+      )
+      .join("\n-------------------\n\n");
 
-    .join("\n-------------------\n\n");
+    const blob = new Blob(
+      [content],
+      { type: "text/plain" }
+    );
 
-  const blob = new Blob(
-    [content],
-    { type: "text/plain" }
-  );
+    const url =
+      window.URL.createObjectURL(blob);
 
-  const url =
-    window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
 
-  const a = document.createElement("a");
+    a.href = url;
 
-  a.href = url;
+    a.download =
+      `${chat.title || "chat"}.txt`;
 
-  a.download =
-    `${chat.title || "chat"}.txt`;
+    a.click();
 
-  a.click();
+    window.URL.revokeObjectURL(url);
 
-  window.URL.revokeObjectURL(url);
+  };
 
-};
+  const handleAuth = async () => {
 
-
-  const uploadDocument = async () => {
-
-    if (!selectedFile) return;
-
-    const formData = new FormData();
-
-    formData.append("file", selectedFile);
+    setLoading(true);
 
     try {
 
+      const endpoint =
+        authMode === "login"
+          ? "login"
+          : "signup";
+
       const response = await axios.post(
-        "http://127.0.0.1:8000/upload-document",
-        formData,
+        `http://127.0.0.1:8000/${endpoint}`,
         {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+          email,
+          password
         }
       );
 
-      alert(response.data.message);
+      if (response.data.token) {
+
+        localStorage.setItem(
+          "token",
+          response.data.token
+        );
+
+        setIsAuthenticated(true);
+        setLoading(false);
+
+      } else {
+
+        alert(
+          response.data.error ||
+          "Authentication failed"
+        );
+
+      }
+
+    } catch (error) {
+
+  console.error(error);
+
+} finally {
+
+  setLoading(false);
+
+}
+
+  };
+
+  const loadChats = async () => {
+
+    try {
+
+      const response = await axios.get(
+        "http://127.0.0.1:8000/chats",
+        {
+          headers: authHeaders
+        }
+      );
+
+      setChatSessions(response.data);
+
+      if (response.data.length > 0) {
+
+  setActiveChatId(
+    response.data[0].id
+  );
+
+} else {
+
+  await createNewChat();
+
+}
 
     } catch (error) {
 
       console.error(error);
 
-      alert("Upload failed");
+    }
+
+  };
+
+  const createNewChat = async () => {
+
+    try {
+
+      const response = await axios.post(
+        "http://127.0.0.1:8000/chats",
+        {
+          title: "New Chat",
+          pinned: false
+        },
+        {
+          headers: authHeaders
+        }
+      );
+
+      const newChat = {
+        id: response.data.id,
+        title: "New Chat",
+        messages: [],
+        pinned: false
+      };
+
+      setChatSessions(prev => [
+        newChat,
+        ...prev
+      ]);
+
+      setActiveChatId(newChat.id);
+
+    } catch (error) {
+
+      console.error(error);
 
     }
 
   };
 
+ const deleteChat = async (chatId) => {
 
+  try {
+
+    await axios.delete(
+      `http://127.0.0.1:8000/chats/${chatId}`,
+      {
+        headers: authHeaders
+      }
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+  }
+
+  const updatedChats =
+    chatSessions.filter(
+      c => c.id !== chatId
+    );
+
+  setChatSessions(updatedChats);
+
+  if (updatedChats.length > 0) {
+
+    if (activeChatId === chatId) {
+
+      setActiveChatId(
+        updatedChats[0].id
+      );
+
+    }
+
+  } else {
+
+    await createNewChat();
+
+  }
+
+};
+
+  const renameChat = async (
+
+    
+  chatId,
+  newTitle
+) => {
+
+  try {
+
+    await axios.put(
+      `http://127.0.0.1:8000/chats/${chatId}`,
+      {
+        title: newTitle
+      },
+      {
+        headers: authHeaders
+      }
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+  }
+
+};
+
+
+const togglePin = async (chat) => {
+
+  const updatedPinned =
+    !chat.pinned;
+
+  setChatSessions(prev =>
+
+    prev.map(c =>
+
+      c.id === chat.id
+        ? {
+            ...c,
+            pinned: updatedPinned
+          }
+        : c
+
+    )
+
+  );
+
+  try {
+
+    await axios.put(
+      `http://127.0.0.1:8000/chats/${chat.id}`,
+      {
+        pinned: updatedPinned
+      },
+      {
+        headers: authHeaders
+      }
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+  }
+
+};
 
   const streamTask = async () => {
 
-    if (!task.trim()) return;
+    if (!task.trim() || loading) return;
 
     setLoading(true);
 
     setStreamLogs([]);
 
     const updatedMessages = [
-      ...activeChat.messages,
+      ...(activeChat?.messages || []),
       {
         role: "user",
         content: task
       }
     ];
 
-    updateActiveChatMessages(updatedMessages);
+    updateActiveChatMessages(
+      updatedMessages
+    );
 
-    setChatSessions(prev =>
+    try {
 
-  prev.map(chat =>
-
-    chat.id === activeChatId &&
-    chat.title === "New Chat"
-
-      ? {
-          ...chat,
-          title:
-            task.length > 40
-              ? task.slice(0, 40) + "..."
-              : task
+      await axios.post(
+        `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
+        {
+          role: "user",
+          content: task
+        },
+        {
+          headers: authHeaders
         }
+      );
 
-      : chat
+    } catch (error) {
 
-  )
+      console.error(error);
 
-);
+    }
 
     try {
 
@@ -216,36 +413,42 @@ const exportChat = (chat) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization:
+              `Bearer ${token}`
           },
           body: JSON.stringify({
             task: task,
-            recipient_email: recipientEmail,
             chat_history: updatedMessages
-          }),
+          })
         }
       );
 
-   
+      const reader =
+        response.body.getReader();
 
-      const reader = response.body.getReader();
-
-      const decoder = new TextDecoder();
+      const decoder =
+        new TextDecoder();
 
       while (true) {
 
-        const { done, value } = await reader.read();
+        const { done, value } =
+          await reader.read();
 
         if (done) break;
 
-        const chunk = decoder.decode(value);
+        const chunk =
+          decoder.decode(value);
 
         const lines = chunk
           .split("\n")
-          .filter(line => line.startsWith("data:"));
+          .filter(line =>
+            line.startsWith("data:")
+          );
 
         for (const line of lines) {
 
-          const message = line.replace("data:", "").trim();
+          const message =
+            line.replace("data:", "").trim();
 
           if (message === "TASK_COMPLETE") {
 
@@ -254,55 +457,98 @@ const exportChat = (chat) => {
             setTask("");
 
             return;
+
           }
 
           try {
 
-            const parsed = JSON.parse(message);
+            const parsed =
+              JSON.parse(message);
 
             setResponse(parsed);
 
             if (parsed.final_response) {
 
-              updateActiveChatMessages(prev => [
+  const assistantMessageId = Date.now();
+  let currentText = "";
+
+updateActiveChatMessages(prev => [
+
   ...prev,
+
   {
+    id: assistantMessageId,
     role: "assistant",
     content: ""
   }
+
 ]);
-             const words = parsed.final_response.split(" ");
 
-let currentText = "";
+  const words =
+    parsed.final_response.split(" ");
 
-for (let i = 0; i < words.length; i++) {
+  for (
+    let i = 0;
+    i < words.length;
+    i++
+  ) {
 
-  currentText += words[i] + " ";
+    currentText += words[i] + " ";
 
-  await new Promise(resolve =>
-    setTimeout(resolve, 20)
+    await new Promise(resolve =>
+      setTimeout(resolve, 15)
+    );
+
+   updateActiveChatMessages(prev =>
+
+  prev.map(msg =>
+
+    msg.id === assistantMessageId
+
+      ? {
+          ...msg,
+          content: currentText
+        }
+
+      : msg
+
+  )
+
+);
+
+  }
+
+  try {
+
+  await axios.post(
+    `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
+    {
+      role: "assistant",
+      content:
+        parsed.final_response
+    },
+    {
+      headers: authHeaders
+    }
   );
 
-  updateActiveChatMessages(prev => {
+} catch (error) {
 
-    const updated = [...prev];
-
-    updated[updated.length - 1] = {
-      role: "assistant",
-      content: currentText
-    };
-
-    return updated;
-
-  });
+  console.error(error);
 
 }
 
-            }
+}
 
           } catch {
 
-            setStreamLogs(prev => [...prev, message]);
+            setStreamLogs(prev => [
+
+  ...prev.slice(-20),
+
+  message
+
+]);
 
           }
 
@@ -312,208 +558,292 @@ for (let i = 0; i < words.length; i++) {
 
     } catch (error) {
 
-      console.error(error);
+  console.error(error);
 
-      setLoading(false);
+} finally {
 
-    }
+  setLoading(false);
+
+}
 
   };
 
-useEffect(() => {
+  useEffect(() => {
 
-  bottomRef.current?.scrollIntoView({
-    behavior: "smooth"
-  });
+    const token =
+      localStorage.getItem("token");
 
-}, [activeChat.messages, streamLogs]);
+    if (token) {
 
+      setIsAuthenticated(true);
 
-useEffect(() => {
-
-  localStorage.setItem(
-    "chatSessions",
-    JSON.stringify(chatSessions)
-  );
-
-}, [chatSessions]);
-
-
-useEffect(() => {
-
-  localStorage.setItem(
-    "activeChatId",
-    activeChatId
-  );
-
-}, [activeChatId]);
-
-  return (
-
-    <div className="min-h-screen bg-slate-900 text-white p-8 pb-40">
-
-      <div className="flex h-screen">
-
-  <div className="w-72 bg-slate-950 border-r border-slate-800 p-4 overflow-y-auto">
-
-    <button
-
-      onClick={() => {
-
-        const newChat = {
-  id: Date.now(),
-  title: "New Chat",
-  messages: [],
-  pinned: false
-};
-
-
-        setChatSessions(prev => [
-          newChat,
-          ...prev
-        ]);
-
-        setActiveChatId(newChat.id);
-
-      }}
-
-      className="w-full bg-blue-600 p-3 rounded-xl mb-6 hover:bg-blue-500 transition"
-    >
-
-      + New Chat
-
-    </button>
-
-    <div className="relative mb-4">
-
-  <FiSearch
-    className="absolute left-3 top-3 text-slate-400"
-    size={18}
-  />
-
-  <input
-    type="text"
-    placeholder="Search chats..."
-    value={searchQuery}
-    onChange={(e) =>
-      setSearchQuery(e.target.value)
     }
-    className="w-full bg-slate-800 text-white pl-10 pr-4 py-3 rounded-xl outline-none"
-  />
 
-</div>
+  }, []);
 
-    <div className="space-y-3">
+  useEffect(() => {
 
-      {filteredChats.map(chat => (
-<div
+    if (isAuthenticated) {
 
-  key={chat.id}
+      loadChats();
 
-  className={`p-3 rounded-xl transition flex items-center justify-between ${
-    activeChatId === chat.id
-      ? "bg-slate-700"
-      : "bg-slate-800 hover:bg-slate-700"
-  }`}
->
+    }
 
-  <div className="flex items-center flex-1 gap-2">
+  }, [isAuthenticated]);
 
-    {editingChatId === chat.id ? (
+  useEffect(() => {
 
-      <input
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
 
-        value={editedTitle}
+  }, [activeChat?.messages, streamLogs]);
 
-        autoFocus
+  if (!isAuthenticated) {
 
-        onChange={(e) =>
-          setEditedTitle(e.target.value)
-        }
+    return (
 
-        onBlur={() => {
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
 
-          setChatSessions(prev =>
+        <div className="bg-slate-800 p-10 rounded-3xl w-full max-w-md shadow-2xl">
 
-            prev.map(c =>
+          <h1 className="text-4xl font-bold mb-8 text-center">
 
-              c.id === chat.id
-                ? {
-                    ...c,
-                    title:
-                      editedTitle || "Untitled Chat"
-                  }
-                : c
+            {authMode === "login"
+              ? "Login"
+              : "Create Account"}
 
-            )
+          </h1>
 
-          );
+          <div className="space-y-5">
 
-          setEditingChatId(null);
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) =>
+                setEmail(e.target.value)
+              }
+              className="w-full p-4 rounded-xl bg-slate-700 outline-none"
+            />
 
-        }}
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
+              className="w-full p-4 rounded-xl bg-slate-700 outline-none"
+            />
 
-        onKeyDown={(e) => {
+            <button
+  disabled={loading}
+  onClick={handleAuth}
+              className={`w-full p-4 rounded-xl transition ${
+  loading
+    ? "bg-slate-600"
+    : "bg-blue-600 hover:bg-blue-500"
+}`}
+            >
 
-          if (e.key === "Enter") {
+             { loading
+  ? "Please wait..."
+  : authMode === "login"
+    ? "Login"
+    : "Sign Up"}
 
-            e.target.blur();
+            </button>
 
-          }
+            <button
+              onClick={() =>
+                setAuthMode(
+                  authMode === "login"
+                    ? "signup"
+                    : "login"
+                )
+              }
+              className="w-full text-slate-400 hover:text-white transition"
+            >
 
-        }}
+              {authMode === "login"
+                ? "Create new account"
+                : "Already have an account?"}
 
-        className="bg-slate-700 text-white px-2 py-1 rounded w-full outline-none"
+            </button>
 
-      />
+          </div>
 
-    ) : (
+        </div>
 
-      <span
-        className="cursor-pointer flex-1"
-        onClick={() => setActiveChatId(chat.id)}
-      >
-        {chat.title}
-      </span>
-
-    )}
-
-  </div>
-
-  <div className="flex items-center ml-2">
-
-    <button
-
-  onClick={() => exportChat(chat)}
-
-  className="text-slate-400 hover:text-green-400 transition mr-2"
->
-
-  <FiDownload size={16} />
-
-</button>
-
-    <button
-
-  onClick={() => {
-
-    setChatSessions(prev =>
-
-      prev.map(c =>
-
-        c.id === chat.id
-          ? {
-              ...c,
-              pinned: !c.pinned
-            }
-          : c
-
-      )
+      </div>
 
     );
 
-  }}
+  }
 
+  return (
+
+    <div className="min-h-screen bg-slate-900 text-white">
+
+      <div className="flex h-screen">
+
+        <div className="w-72 bg-slate-950 border-r border-slate-800 p-4 overflow-y-auto">
+
+          <button
+           onClick={() => {
+
+  localStorage.removeItem("token");
+  localStorage.removeItem("chatSessions");
+  localStorage.removeItem("activeChatId");
+
+  setChatSessions([]);
+
+  setActiveChatId(null);
+
+  setResponse(null);
+
+  setStreamLogs([]);
+
+  setSelectedFile(null);
+
+  setTask("");
+
+  setIsAuthenticated(false);
+
+}}
+            className="w-full bg-red-600 p-3 rounded-xl mb-4 hover:bg-red-500 transition flex items-center justify-center gap-2"
+          >
+
+            <FiLogOut />
+            Logout
+
+          </button>
+
+          <button
+            onClick={createNewChat}
+            className="w-full bg-blue-600 p-3 rounded-xl mb-6 hover:bg-blue-500 transition"
+          >
+
+            + New Chat
+
+          </button>
+
+          <div className="relative mb-4">
+
+            <FiSearch
+              className="absolute left-3 top-3 text-slate-400"
+              size={18}
+            />
+
+            <input
+              type="text"
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) =>
+                setSearchQuery(e.target.value)
+              }
+              className="w-full bg-slate-800 text-white pl-10 pr-4 py-3 rounded-xl outline-none"
+            />
+
+          </div>
+
+          <div className="space-y-3">
+
+            {filteredChats.map(chat => (
+
+              <div
+                key={chat.id}
+                className={`p-3 rounded-xl transition flex items-center justify-between ${
+                  activeChatId === chat.id
+                    ? "bg-slate-700"
+                    : "bg-slate-800 hover:bg-slate-700"
+                }`}
+              >
+
+                <div className="flex items-center flex-1 gap-2">
+
+                  {editingChatId === chat.id ? (
+
+                    <input
+                      value={editedTitle}
+                      autoFocus
+                      onKeyDown={(e) => {
+
+                      if (e.key === "Enter") {
+
+                       e.target.blur();
+
+                  }
+
+          }}
+                      onChange={(e) =>
+                        setEditedTitle(e.target.value)
+                      }
+                      onBlur={() => {
+
+                        setChatSessions(prev =>
+
+                          prev.map(c =>
+
+                            c.id === chat.id
+                              ? {
+                                  ...c,
+                                  title:
+                                  editedTitle.trim() ||
+                                  "Untitled Chat"
+                                }
+                              : c
+
+                          )
+
+                        );
+
+                        renameChat(
+  chat.id,
+  editedTitle.trim() || "Untitled Chat"
+
+  
+);
+
+setEditingChatId(null);
+
+                      }}
+                      className="bg-slate-700 text-white px-2 py-1 rounded w-full outline-none"
+                    />
+
+                  ) : (
+
+                    <span
+                      className="cursor-pointer flex-1"
+                      onClick={() =>
+                        setActiveChatId(chat.id)
+                      }
+                    >
+
+                      {chat.title}
+
+                    </span>
+
+                  )}
+
+                </div>
+
+                <div className="flex items-center ml-2">
+
+                  <button
+                    onClick={() =>
+                      exportChat(chat)
+                    }
+                    className="text-slate-400 hover:text-green-400 transition mr-2"
+                  >
+
+                    <FiDownload size={16} />
+
+                  </button>
+
+                  <button
+  onClick={() => togglePin(chat)}
   className={`transition mr-2 ${
     chat.pinned
       ? "text-yellow-400"
@@ -524,405 +854,329 @@ useEffect(() => {
   <FiStar size={16} />
 
 </button>
-    <button
 
-      onClick={() => {
+                  <button
+                    onClick={() => {
 
-        setEditingChatId(chat.id);
+                      setEditingChatId(chat.id);
 
-        setEditedTitle(chat.title);
+                      setEditedTitle(chat.title);
 
-      }}
+                    }}
+                    className="text-slate-400 hover:text-blue-400 transition mr-2"
+                  >
 
-      className="text-slate-400 hover:text-blue-400 transition mr-2"
-    >
+                    <FiEdit2 size={16} />
 
-      <FiEdit2 size={16} />
+                  </button>
 
-    </button>
+                  <button
+                    onClick={() =>
+                      deleteChat(chat.id)
+                    }
+                    className="text-slate-400 hover:text-red-400 transition"
+                  >
 
-    <button
+                    <FiTrash2 size={16} />
 
-      onClick={() => {
+                  </button>
 
-       const filteredChats = chatSessions
-  .filter(chat =>
+                </div>
 
-    chat.title
-      .toLowerCase()
-      .includes(
-        searchQuery.toLowerCase()
-      )
+              </div>
 
-  )
-  .sort((a, b) => {
+            ))}
 
-    if (a.pinned && !b.pinned) return -1;
-
-    if (!a.pinned && b.pinned) return 1;
-
-    return 0;
-
-  });
-
-        if (filteredChats.length === 0) {
-
-          const newChat = {
-  id: Date.now(),
-  title: "New Chat",
-  messages: [],
-  pinned: false
-};
-
-          setChatSessions([newChat]);
-
-          setActiveChatId(newChat.id);
-
-        } else {
-
-          setChatSessions(filteredChats);
-
-          if (activeChatId === chat.id) {
-
-            setActiveChatId(
-              filteredChats[0].id
-            );
-
-          }
-
-        }
-
-      }}
-
-      className="text-slate-400 hover:text-red-400 transition"
-    >
-
-      <FiTrash2 size={16} />
-
-    </button>
-
-  </div>
-
-</div>
-      ))}
-
-    </div>
-
-  </div>
-
-  <div className="flex-1 overflow-y-auto p-8">
-
-    <div className="max-w-5xl mx-auto">
-
-        <h1 className="text-5xl font-bold mb-10">
-          Autonomous Business Agent
-        </h1>
-
-
-
-
-        {loading && (
-
-          <div className="mt-6 bg-slate-800 p-4 rounded-xl animate-pulse">
-            Running AI agents...
           </div>
 
-        )}
+        </div>
 
+        <div className="flex-1 overflow-y-auto p-8 pb-40">
 
+          <div className="max-w-5xl mx-auto">
 
-        {streamLogs.length > 0 && (
+            <h1 className="text-5xl font-bold mb-10">
+              Autonomous Business Agent
+            </h1>
 
-          <div className="mt-8 bg-slate-800 p-6 rounded-2xl">
+            {loading && (
 
-            <h2 className="text-2xl font-semibold mb-4">
-              Live Agent Execution
-            </h2>
+              <div className="mt-6 bg-slate-800 p-4 rounded-xl animate-pulse">
+                Running AI agents...
+              </div>
 
-            <div className="space-y-3">
+            )}
 
-              {streamLogs.map((log, index) => (
+            {streamLogs.length > 0 && (
+
+              <div className="mt-8 bg-slate-800 p-6 rounded-2xl">
+
+                <h2 className="text-2xl font-semibold mb-4">
+                  Live Agent Execution
+                </h2>
+
+                <div className="space-y-3">
+
+                  {streamLogs.map((log, index) => (
+
+                    <div
+                      key={index}
+                      className="bg-slate-700 p-3 rounded-xl"
+                    >
+
+                      {log}
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+              </div>
+
+            )}
+
+            <div className="mt-8 space-y-6">
+
+              {activeChat?.messages?.length === 0 && (
+
+  <div className="text-center text-slate-500 mt-32">
+
+    <h2 className="text-3xl font-semibold mb-4">
+      Start a conversation
+    </h2>
+
+    <p>
+      Upload files, analyze datasets,
+      generate reports, or ask AI anything.
+    </p>
+
+  </div>
+
+)}
+
+              {activeChat?.messages?.map((msg, index) => (
 
                 <div
-                  key={index}
-                  className="bg-slate-700 p-3 rounded-xl animate-pulse"
+                  key={msg.id || index}
+                  className={`p-5 rounded-2xl max-w-4xl ${
+                    msg.role === "user"
+                      ? "bg-blue-600 ml-auto"
+                      : "bg-slate-800"
+                  }`}
                 >
-                  {log}
+
+                  <p className="text-sm opacity-70 mb-3">
+
+                    {msg.role === "user"
+                      ? "You"
+                      : "AI Assistant"}
+
+                  </p>
+
+                  <div className="prose prose-invert max-w-none">
+
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+
+                        code({
+                          inline,
+                          className,
+                          children,
+                          ...props
+                        }) {
+
+                          const match =
+                            /language-(\w+)/.exec(
+                              className || ""
+                            );
+
+                          return !inline && match ? (
+
+                            <SyntaxHighlighter
+                              style={oneDark}
+                              language={match[1]}
+                              PreTag="div"
+                              {...props}
+                            >
+
+                              {String(children).replace(/\n$/, "")}
+
+                            </SyntaxHighlighter>
+
+                          ) : (
+
+                            <code
+                              className="bg-slate-700 px-2 py-1 rounded"
+                              {...props}
+                            >
+
+                              {children}
+
+                            </code>
+
+                          );
+
+                        }
+
+                      }}
+                    >
+
+                      {msg.content}
+
+                    </ReactMarkdown>
+
+                  </div>
+
                 </div>
 
               ))}
 
             </div>
 
+            {response?.chart_path && (
+
+              <div className="mt-8 bg-slate-800 p-6 rounded-2xl">
+
+                <h2 className="text-2xl font-semibold mb-4">
+                  Generated Chart
+                </h2>
+
+                <img
+                  src={`http://127.0.0.1:8000/${response.chart_path}`}
+                  alt="Generated Chart"
+                  className="rounded-2xl border border-slate-700 shadow-lg w-full max-w-4xl"
+                />
+
+              </div>
+
+            )}
+
+            {response?.report_path && (
+
+              <div className="mt-6">
+
+                <a
+                  href={`http://127.0.0.1:8000/${response.report_path}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-purple-600 px-6 py-3 rounded-xl inline-block hover:bg-purple-500 transition"
+                >
+
+                  Download AI Report
+
+                </a>
+
+              </div>
+
+            )}
+
+            <div ref={bottomRef}></div>
+
           </div>
-
-        )}
-
-
-
-        <div className="mt-8 space-y-6">
-
-          {activeChat.messages.map((msg, index) => (
-
-            <div
-              key={index}
-              className={`p-5 rounded-2xl max-w-4xl ${
-                msg.role === "user"
-                  ? "bg-blue-600 ml-auto"
-                  : "bg-slate-800"
-              }`}
-            >
-
-              <p className="text-sm opacity-70 mb-3">
-                {msg.role === "user"
-                  ? "You"
-                  : "AI Assistant"}
-              </p>
-
-             <div className="prose prose-invert max-w-none">
-
- <ReactMarkdown
-
-  remarkPlugins={[remarkGfm]}
-
-  components={{
-
-    code({ inline, className, children, ...props }) {
-
-      const match = /language-(\w+)/.exec(className || "");
-
-      return !inline && match ? (
-
-        <SyntaxHighlighter
-          style={oneDark}
-          language={match[1]}
-          PreTag="div"
-          {...props}
-        >
-
-          {String(children).replace(/\n$/, "")}
-
-        </SyntaxHighlighter>
-
-      ) : (
-
-        <code
-          className="bg-slate-700 px-2 py-1 rounded"
-          {...props}
-        >
-
-          {children}
-
-        </code>
-
-      );
-
-    },
-
-    table({ children }) {
-
-      return (
-
-        <table className="table-auto border-collapse border border-slate-600 w-full my-4">
-
-          {children}
-
-        </table>
-
-      );
-
-    },
-
-    th({ children }) {
-
-      return (
-
-        <th className="border border-slate-600 px-4 py-2 bg-slate-700">
-
-          {children}
-
-        </th>
-
-      );
-
-    },
-
-    td({ children }) {
-
-      return (
-
-        <td className="border border-slate-600 px-4 py-2">
-
-          {children}
-
-        </td>
-
-      );
-
-    }
-
-  }}
-
->
-
-  {msg.content}
-
-</ReactMarkdown>
-
-</div>
-
-            </div>
-
-          ))}
 
         </div>
 
-{selectedFile && (
+      </div>
 
-  <div className="mt-4 text-sm text-slate-400">
+      <div className="fixed bottom-0 left-0 w-full bg-slate-900 border-t border-slate-700 p-4">
 
-    Uploaded:
-    <span className="ml-2 text-white">
-      {selectedFile.name}
-    </span>
+        <div className="max-w-5xl mx-auto flex items-center gap-4">
 
-  </div>
+          <label className="cursor-pointer text-2xl text-slate-300 hover:text-white transition">
 
-)}
+            <FiPaperclip />
 
-        {response?.chart_path && (
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.csv,.xlsx"
+              className="hidden"
+              onChange={async (e) => {
 
-          <div className="mt-8 bg-slate-800 p-6 rounded-2xl">
+                const file =
+                  e.target.files[0];
 
-            <h2 className="text-2xl font-semibold mb-4">
-              Generated Chart
-            </h2>
+                if (!file) return;
 
-            <img
-              src={`http://127.0.0.1:8000/${response.chart_path}`}
-              alt="Generated Chart"
-              className="rounded-2xl border border-slate-700 shadow-lg w-full max-w-4xl"
+                setSelectedFile(file);
+
+                const formData =
+                  new FormData();
+
+                formData.append(
+                  "file",
+                  file
+                );
+
+                try {
+
+                  const response =
+                    await axios.post(
+                      "http://127.0.0.1:8000/upload-document",
+                      formData,
+                      {
+                        headers: {
+                           "Content-Type":
+      "multipart/form-data",
+    Authorization:
+      `Bearer ${token}`
+                        }
+                      }
+                    );
+
+                  alert(response.data.message);
+
+                } catch (error) {
+
+                  console.error(error);
+
+                  alert("Upload failed");
+
+                }
+
+              }}
             />
 
-          </div>
+          </label>
 
-        )}
+          <input
+            type="text"
+            placeholder="Ask anything..."
+            value={task}
+            onChange={(e) =>
+              setTask(e.target.value)
+            }
+            onKeyDown={(e) => {
 
+              if (e.key === "Enter") {
 
+                streamTask();
 
-        {response?.report_path && (
+              }
 
-          <div className="mt-6">
+            }}
+            className="flex-1 p-4 rounded-2xl bg-slate-800 outline-none border border-slate-700"
+          />
 
-            <a
-              href={`http://127.0.0.1:8000/${response.report_path}`}
-              target="_blank"
-              rel="noreferrer"
-              className="bg-purple-600 px-6 py-3 rounded-xl inline-block hover:bg-purple-500 transition"
-            >
-              Download AI Report
-            </a>
+          <button
+  disabled={loading}
+  onClick={streamTask}
+            className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-500 transition"
+          >
 
-          </div>
+            <FiSend size={20} />
 
-        )}
+          </button>
+
+        </div>
 
       </div>
 
-
-<div ref={bottomRef}></div>
-    </div>
-
-  </div>
-<div className="fixed bottom-0 left-0 w-full bg-slate-900 border-t border-slate-700 p-4">
-
-  <div className="max-w-5xl mx-auto flex items-center gap-4">
-
-    <label className="cursor-pointer text-2xl text-slate-300 hover:text-white transition">
-
-      <FiPaperclip />
-
-      <input
-        type="file"
-        accept=".pdf,.doc,.docx,.csv,.xlsx"
-        className="hidden"
-
-        onChange={async (e) => {
-
-          const file = e.target.files[0];
-
-          if (!file) return;
-
-          setSelectedFile(file);
-
-          const formData = new FormData();
-
-          formData.append("file", file);
-
-          try {
-
-            const response = await axios.post(
-              "http://127.0.0.1:8000/upload-document",
-              formData,
-              {
-                headers: {
-                  "Content-Type": "multipart/form-data",
-                },
-              }
-            );
-
-            alert(response.data.message);
-
-          } catch (error) {
-
-            console.error(error);
-
-            alert("Upload failed");
-
-          }
-
-        }}
-
-      />
-
-    </label>
-
-    <input
-  type="text"
-
-  onKeyDown={(e) => {
-
-    if (e.key === "Enter") {
-
-      streamTask();
-
-    }
-
-  }}
-      placeholder="Ask anything..."
-      value={task}
-      onChange={(e) => setTask(e.target.value)}
-      className="flex-1 p-4 rounded-2xl bg-slate-800 outline-none border border-slate-700"
-    />
-
-
-    
-
-    <button
-      onClick={streamTask}
-      className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-500 transition"
-    >
-
-      <FiSend size={20} />
-
-    </button>
-
-  </div>
-
-</div>
     </div>
 
   );
+
 }
 
 export default App;
