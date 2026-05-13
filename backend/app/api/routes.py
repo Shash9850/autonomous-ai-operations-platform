@@ -70,7 +70,16 @@ async def stream_workflow(
         "chat_history": chat_history
     })
 
-    yield f"data: {json.dumps(result)}\n\n"
+    final_response = result.get(
+    "final_response",
+    ""
+)
+
+    for char in final_response:
+
+        yield f"data: {json.dumps({'token': char})}\n\n"
+
+        await asyncio.sleep(0.005)
 
     yield "data: TASK_COMPLETE\n\n"
 

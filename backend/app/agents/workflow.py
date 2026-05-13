@@ -10,6 +10,7 @@ from app.agents.planner import planner_agent
 from app.agents.executor import executor_agent
 from app.agents.rag_agent import rag_agent
 from app.agents.synthesis_agent import synthesis_agent
+from app.agents.search_agent import search_agent
 from app.agents.web_search_agent import (
     web_search_agent
 )
@@ -30,7 +31,9 @@ def route_decision(state):
 
     elif state["route"] == "analytics":
         return "analytics"
-
+    
+    if state["route"] == "search":
+        return "search"
 
 def should_continue(state):
 
@@ -53,6 +56,7 @@ def build_workflow():
     graph.add_edge("analytics", "synthesis")
     graph.add_node("synthesis", synthesis_agent)
     graph.add_node("web_search",web_search_agent)
+    graph.add_node("search",search_agent)
 
     graph.set_entry_point("supervisor")
 
@@ -81,5 +85,6 @@ def build_workflow():
     graph.add_edge("analytics", "synthesis")
     graph.add_edge("synthesis", END)
     graph.add_edge("web_search","synthesis")
+    graph.add_edge("search","synthesis")
 
     return graph.compile()

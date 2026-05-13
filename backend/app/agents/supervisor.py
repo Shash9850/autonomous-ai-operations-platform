@@ -1,5 +1,16 @@
 def supervisor_agent(state):
 
+    search_keywords = [
+    "latest",
+    "news",
+    "current",
+    "today",
+    "recent",
+    "search",
+    "internet",
+    "web"
+]
+
     task = state["task"].lower()
 
     history_messages = state.get(
@@ -81,6 +92,10 @@ def supervisor_agent(state):
     elif any(word in combined_context for word in planner_keywords):
 
         route = "planner"
+
+    elif any(word in combined_context for word in search_keywords):
+
+        route = "search"
 
     else:
 

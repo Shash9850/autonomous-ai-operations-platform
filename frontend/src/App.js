@@ -238,7 +238,7 @@ function App() {
       const response = await axios.post(
         "http://127.0.0.1:8000/chats",
         {
-          title: "New Chat",
+          title: "AI Conversation",
           pinned: false
         },
         {
@@ -383,6 +383,18 @@ const SpeechRecognition =
   window.SpeechRecognition ||
   window.webkitSpeechRecognition;
 
+ useEffect(() => {
+
+  if (!SpeechRecognition) {
+
+    alert(
+      "Speech Recognition not supported in this browser"
+    );
+
+  }
+
+}, []);
+
 const recognitionRef = useRef(null);
 
 useEffect(() => {
@@ -462,6 +474,59 @@ const startListening = () => {
       updatedMessages
     );
 
+
+
+    const generatedTitle =
+
+  task.length > 45
+    ? task.slice(0, 45) + "..."
+    : task;
+
+setChatSessions(prev =>
+
+  prev.map(chat =>
+
+    chat.id === activeChatId &&
+    (
+      chat.title === "New Chat" ||
+      chat.title.trim() === ""
+    )
+
+      ? {
+          ...chat,
+          title: generatedTitle
+        }
+
+      : chat
+
+  )
+
+);
+
+try {
+
+  await axios.put(
+
+    `http://127.0.0.1:8000/chats/${activeChatId}`,
+
+    {
+      title: generatedTitle
+    },
+
+    {
+      headers: authHeaders
+    }
+
+  );
+
+} catch (error) {
+
+  console.error(error);
+
+}
+
+
+
     try {
 
       await axios.post(
@@ -505,6 +570,22 @@ const startListening = () => {
       const decoder =
         new TextDecoder();
 
+      const assistantMessageId = Date.now();
+
+updateActiveChatMessages(prev => [
+
+  ...prev,
+
+  {
+    id: assistantMessageId,
+    role: "assistant",
+    content: ""
+  }
+
+]);
+
+      let streamedContent = "";
+
       while (true) {
 
         const { done, value } =
@@ -528,108 +609,45 @@ const startListening = () => {
 
           if (message === "TASK_COMPLETE") {
 
-            setLoading(false);
+  setLoading(false);
 
-            setTask("");
-
-            return;
-
-          }
-
-          try {
-
-            const parsed =
-              JSON.parse(message);
-
-            setResponse(parsed);
-
-            if (parsed.final_response) {
-
-  const assistantMessageId = Date.now();
-  let currentText = "";
-
-updateActiveChatMessages(prev => [
-
-  ...prev,
-
-  {
-    id: assistantMessageId,
-    role: "assistant",
-    content: ""
-  }
-
-]);
-
-  const words =
-    parsed.final_response.split(" ");
-
-  for (
-    let i = 0;
-    i < words.length;
-    i++
-  ) {
-
-    currentText += words[i] + " ";
-
-    await new Promise(resolve =>
-      setTimeout(resolve, 15)
-    );
-
-   updateActiveChatMessages(prev =>
-
-  prev.map(msg =>
-
-    msg.id === assistantMessageId
-
-      ? {
-          ...msg,
-          content: currentText
-        }
-
-      : msg
-
-  )
-
-);
-
-  }
+  setTask("");
 
   try {
 
-  await axios.post(
-    `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
-    {
-      role: "assistant",
-      content:
-        parsed.final_response
-    },
-    {
-      headers: authHeaders
-    }
-  );
-
-} catch (error) {
-
-  console.error(error);
-
-}
-
-if (voiceEnabled) {
-
-  speechSynthesis.cancel();
-
-  const utterance =
-    new SpeechSynthesisUtterance(
-      parsed.final_response
+    await axios.post(
+      `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
+      {
+        role: "assistant",
+        content: streamedContent
+      },
+      {
+        headers: authHeaders
+      }
     );
 
-  utterance.rate = 1;
+  } catch (error) {
 
-  utterance.pitch = 1;
+    console.error(error);
 
-  utterance.lang = "en-US";
+  }
 
-  utterance.onstart = () => {
+  if (voiceEnabled && streamedContent) {
+
+    speechSynthesis.cancel();
+
+    const utterance =
+  new SpeechSynthesisUtterance(
+    streamedContent
+  );
+
+utterance.rate = 1;
+
+utterance.pitch = 1;
+
+utterance.lang = "en-US";
+
+utterance.onstart = () => {
 
   setIsSpeaking(true);
 
@@ -647,13 +665,51 @@ utterance.onerror = () => {
 
 };
 
+speechSynthesis.speak(utterance);
 
-  speechSynthesis.speak(utterance);
+  }
+
+  return;
 
 }
+
+          try {
+
+            const parsed =
+              JSON.parse(message);
+              if (parsed.token) {
+
+  streamedContent += parsed.token;
+
+  updateActiveChatMessages(prev =>
+
+    prev.map(msg =>
+
+      msg.id === assistantMessageId
+
+        ? {
+            ...msg,
+            content: streamedContent
+          }
+
+        : msg
+
+    )
+
+  );
+
 }
 
-          } catch {
+            setResponse(parsed);
+
+  
+
+
+
+
+}
+
+  catch {
 
             setStreamLogs(prev => [
 
@@ -1302,43 +1358,46 @@ setEditingChatId(null);
           />
 
 
-<button
-  disabled={isListening}
-  onClick={startListening}
-
-  className={`p-4 rounded-2xl transition ${
-    isListening
-      ? "bg-red-600"
-      : "bg-slate-700 hover:bg-slate-600"
-  }`}
->
-
-  {isSpeaking && (
+<div className="flex items-center gap-3">
 
   <button
-
-    onClick={() => {
-
-      speechSynthesis.cancel();
-
-      setIsSpeaking(false);
-
-    }}
-
-    className="bg-red-600 px-4 py-4 rounded-2xl hover:bg-red-500 transition"
+    disabled={isListening}
+    onClick={startListening}
+    className={`p-4 rounded-2xl transition ${
+      isListening
+        ? "bg-red-600"
+        : "bg-slate-700 hover:bg-slate-600"
+    }`}
   >
 
-    Stop
+    {isListening
+      ? <FiMicOff size={20} />
+      : <FiMic size={20} />}
 
   </button>
 
-)}
+  {isSpeaking && (
 
-  {isListening
-    ? <FiMicOff size={20} />
-    : <FiMic size={20} />}
+    <button
 
-</button>
+      onClick={() => {
+
+        speechSynthesis.cancel();
+
+        setIsSpeaking(false);
+
+      }}
+
+      className="bg-red-600 p-4 rounded-2xl hover:bg-red-500 transition"
+    >
+
+      Stop
+
+    </button>
+
+  )}
+
+</div>
 
           <button
   disabled={loading}
