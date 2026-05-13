@@ -1,27 +1,79 @@
-from urllib import response
-
 from app.core.llm import get_planner_llm
-from app.agents import state
+
+from app.tools.vector_memory import (
+    store_memory,
+    retrieve_memory
+)
+
+from langchain_core.messages import (
+    HumanMessage,
+    AIMessage,
+    SystemMessage
+)
 
 
 def synthesis_agent(state):
 
     llm = get_planner_llm()
 
-    history = "\n".join(state.get("chat_history", []))
+    history = state.get(
+        "chat_history",
+        []
+    )
 
-    prompt = f"""
+    retrieved_memories = retrieve_memory(
+        state["task"]
+    )
+
+    memory_context = "\n".join(
+        retrieved_memories
+    )
+
+    messages = [
+
+        SystemMessage(
+            content=f"""
 You are a professional AI operations assistant.
 
-Use the provided execution results to generate a clean,
-concise, and user-friendly final response.
+Generate clear, concise, helpful,
+and conversational responses.
 
-DO NOT expose:
+Use previous conversation context naturally.
+
+Relevant Long-Term Memories:
+{memory_context}
+
+Do NOT expose:
 - internal reasoning
-- raw execution traces
-- conversation history
+- execution traces
 - debugging information
+"""
+        )
 
+    ]
+
+    for msg in history[-10:]:
+
+        if msg["role"] == "user":
+
+            messages.append(
+                HumanMessage(
+                    content=msg["content"]
+                )
+            )
+
+        elif msg["role"] == "assistant":
+
+            messages.append(
+                AIMessage(
+                    content=msg["content"]
+                )
+            )
+
+    messages.append(
+
+        HumanMessage(
+            content=f"""
 Current User Task:
 {state['task']}
 
@@ -30,19 +82,56 @@ Execution Results:
 
 Generate a polished final answer.
 """
+        )
 
-    response = llm.invoke(prompt)
+    )
 
-    updated_history = state.get("chat_history", [])
+    response = llm.invoke(messages)
 
-    updated_history.append(f"User: {state['task']}")
+    updated_history = history + [
 
-    updated_history.append(f"AI: {response.content}")
+        {
+            "role": "user",
+            "content": state["task"]
+        },
+
+        {
+            "role": "assistant",
+            "content": response.content
+        }
+
+    ]
+
+    memory_text = f"""
+User:
+{state['task']}
+
+AI:
+{response.content}
+"""
+
+    store_memory(
+
+        memory_text,
+
+        memory_id=str(len(updated_history))
+
+    )
 
     return {
-    **state,
-    "final_response": response.content,
-    "chat_history": updated_history,
-    "chart_path": state.get("chart_path"),
-    "report_path": state.get("report_path")
-}
+
+        **state,
+
+        "final_response": response.content,
+
+        "chat_history": updated_history,
+
+        "chart_path": state.get(
+            "chart_path"
+        ),
+
+        "report_path": state.get(
+            "report_path"
+        )
+
+    }

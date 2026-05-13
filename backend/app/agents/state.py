@@ -13,3 +13,4 @@ class AgentState(TypedDict):
     chart_path: str
     report_path: str
     recipient_email: str
+    chat_history: list

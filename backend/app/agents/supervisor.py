@@ -2,7 +2,18 @@ def supervisor_agent(state):
 
     task = state["task"].lower()
 
-    history = " ".join(state.get("chat_history", []))
+    history_messages = state.get(
+        "chat_history",
+        []
+    )
+
+    history = "\n".join([
+
+        f"{msg['role']}: {msg['content']}"
+
+        for msg in history_messages
+
+    ])
 
     combined_context = f"{history} {task}"
 
@@ -18,19 +29,37 @@ def supervisor_agent(state):
     ]
 
     analytics_keywords = [
-    "csv",
-    "excel",
-    "dataset",
-    "data",
-    "analyze",
-    "analysis",
-    "report"
+        "csv",
+        "excel",
+        "dataset",
+        "data",
+        "analyze",
+        "analysis",
+        "report"
     ]
-
 
     memory_keywords = [
         "remember",
         "memory"
+    ]
+
+    web_keywords = [
+        "latest",
+        "news",
+        "today",
+        "current",
+        "recent",
+        "research",
+        "internet",
+        "web",
+        "search"
+    ]
+
+    planner_keywords = [
+        "api",
+        "fetch",
+        "automation",
+        "workflow"
     ]
 
     if any(word in combined_context for word in rag_keywords):
@@ -45,21 +74,22 @@ def supervisor_agent(state):
 
         route = "analytics"
 
-    elif any(word in task for word in [
-    "research",
-    "latest",
-    "news",
-    "api",
-    "fetch",
-    "data"
-    ]):
+    elif any(word in combined_context for word in web_keywords):
+
+        route = "web_search"
+
+    elif any(word in combined_context for word in planner_keywords):
 
         route = "planner"
+
     else:
 
         route = "direct"
 
     return {
+
         **state,
+
         "route": route
+
     }

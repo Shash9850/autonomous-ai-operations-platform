@@ -14,7 +14,10 @@ import {
   FiSearch,
   FiStar,
   FiDownload,
-  FiLogOut
+  FiLogOut,
+  FiMic,
+  FiMicOff,
+  FiVolume2
 } from "react-icons/fi";
 
 function App() {
@@ -64,6 +67,15 @@ function App() {
     ) || {
       messages: []
     };
+
+    const [isListening, setIsListening] =
+    useState(false);
+
+    const [voiceEnabled, setVoiceEnabled] =
+    useState(true);
+
+    const [isSpeaking, setIsSpeaking] =
+    useState(false);
 
   const filteredChats = chatSessions
     .filter(chat =>
@@ -366,6 +378,70 @@ const togglePin = async (chat) => {
 
 };
 
+
+const SpeechRecognition =
+  window.SpeechRecognition ||
+  window.webkitSpeechRecognition;
+
+const recognitionRef = useRef(null);
+
+useEffect(() => {
+
+  recognitionRef.current =
+    new SpeechRecognition();
+
+  recognitionRef.current.continuous = false;
+
+  recognitionRef.current.interimResults = false;
+
+  recognitionRef.current.lang = "en-US";
+
+}, []);
+
+
+const startListening = () => {
+
+  if (isListening) return;
+
+  setIsListening(true);
+
+  try {
+
+    recognitionRef.current.start();
+
+  } catch (error) {
+
+    console.error(error);
+
+    setIsListening(false);
+
+  }
+
+  recognitionRef.current.onresult = (event) => {
+
+    const transcript =
+      event.results[0][0].transcript;
+
+    setTask(transcript);
+
+    setIsListening(false);
+
+  };
+
+  recognitionRef.current.onerror = () => {
+
+    setIsListening(false);
+
+  };
+
+  recognitionRef.current.onend = () => {
+
+    setIsListening(false);
+
+  };
+
+};
+
   const streamTask = async () => {
 
     if (!task.trim() || loading) return;
@@ -538,6 +614,43 @@ updateActiveChatMessages(prev => [
 
 }
 
+if (voiceEnabled) {
+
+  speechSynthesis.cancel();
+
+  const utterance =
+    new SpeechSynthesisUtterance(
+      parsed.final_response
+    );
+
+  utterance.rate = 1;
+
+  utterance.pitch = 1;
+
+  utterance.lang = "en-US";
+
+  utterance.onstart = () => {
+
+  setIsSpeaking(true);
+
+};
+
+utterance.onend = () => {
+
+  setIsSpeaking(false);
+
+};
+
+utterance.onerror = () => {
+
+  setIsSpeaking(false);
+
+};
+
+
+  speechSynthesis.speak(utterance);
+
+}
 }
 
           } catch {
@@ -719,6 +832,35 @@ updateActiveChatMessages(prev => [
             Logout
 
           </button>
+
+          <button
+
+  onClick={() => {
+
+  if (voiceEnabled) {
+
+    speechSynthesis.cancel();
+
+  }
+
+  setVoiceEnabled(!voiceEnabled);
+
+}}
+
+  className={`w-full p-3 rounded-xl mb-4 transition flex items-center justify-center gap-2 ${
+    voiceEnabled
+      ? "bg-green-600 hover:bg-green-500"
+      : "bg-slate-700 hover:bg-slate-600"
+  }`}
+>
+
+  <FiVolume2 />
+
+  {voiceEnabled
+    ? "Voice ON"
+    : "Voice OFF"}
+
+</button>
 
           <button
             onClick={createNewChat}
@@ -1158,6 +1300,45 @@ setEditingChatId(null);
             }}
             className="flex-1 p-4 rounded-2xl bg-slate-800 outline-none border border-slate-700"
           />
+
+
+<button
+  disabled={isListening}
+  onClick={startListening}
+
+  className={`p-4 rounded-2xl transition ${
+    isListening
+      ? "bg-red-600"
+      : "bg-slate-700 hover:bg-slate-600"
+  }`}
+>
+
+  {isSpeaking && (
+
+  <button
+
+    onClick={() => {
+
+      speechSynthesis.cancel();
+
+      setIsSpeaking(false);
+
+    }}
+
+    className="bg-red-600 px-4 py-4 rounded-2xl hover:bg-red-500 transition"
+  >
+
+    Stop
+
+  </button>
+
+)}
+
+  {isListening
+    ? <FiMicOff size={20} />
+    : <FiMic size={20} />}
+
+</button>
 
           <button
   disabled={loading}
