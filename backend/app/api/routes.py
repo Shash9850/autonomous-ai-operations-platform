@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from fastapi import UploadFile, File
@@ -16,29 +17,48 @@ from app.agents.workflow import build_workflow
 from app.analytics.session_store import LATEST_DATASET
 import app.analytics.session_store as session_store
 
+from fastapi import Header
+from jose import jwt
+
+SECRET_KEY = "SUPER_SECRET_KEY"
+ALGORITHM = "HS256"
+
 router = APIRouter()
 
 workflow = build_workflow()
 
 
 @router.post("/run-task", response_model=TaskResponse)
-async def run_task(request: TaskRequest):
+async def run_task(
+    request: TaskRequest,
+    authorization: str = Header(None)
+):
+    
+
+    token = authorization.split(" ")[1]
+
+    payload = jwt.decode(token,SECRET_KEY,algorithms=[ALGORITHM])
+
+    user_id = payload["user_id"]
 
     result = workflow.invoke({
-        "task": request.task,
-        "route": "",
-        "plan": [],
-        "current_step": 0,
-        "results": [],
-        "final_response": "",
-        "chat_history": []
-    })
+    "task": request.task,
+    "user_id": user_id,
+    "route": "",
+    "plan": [],
+    "current_step": 0,
+    "results": [],
+    "final_response": "",
+    "recipient_email": request.recipient_email,
+    "chat_history": request.chat_history
+})
 
     return result
 
 
 async def stream_workflow(
     task: str,
+    user_id: int,
     recipient_email: str = None,
     chat_history: list = []
 ):
@@ -60,15 +80,16 @@ async def stream_workflow(
     await asyncio.sleep(1)
 
     result = workflow.invoke({
-        "task": task,
-        "route": "",
-        "plan": [],
-        "current_step": 0,
-        "results": [],
-        "final_response": "",
-        "recipient_email": recipient_email,
-        "chat_history": chat_history
-    })
+    "task": task,
+    "user_id": user_id,
+    "route": "",
+    "plan": [],
+    "current_step": 0,
+    "results": [],
+    "final_response": "",
+    "recipient_email": recipient_email,
+    "chat_history": chat_history
+})
 
     final_response = result.get(
     "final_response",
@@ -85,10 +106,28 @@ async def stream_workflow(
 
 
 @router.post("/stream-task")
-async def stream_task(request: TaskRequest):
+async def stream_task(
+    request: TaskRequest,
+    authorization: str = Header(None)
+):
+
+    token = authorization.split(" ")[1]
+
+    payload = jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM]
+    )
+
+    user_id = payload["user_id"]
 
     return StreamingResponse(
-        stream_workflow(request.task,request.recipient_email,request.chat_history),
+        stream_workflow(
+            request.task,
+            user_id,
+            request.recipient_email,
+            request.chat_history
+        ),
         media_type="text/event-stream"
     )
 

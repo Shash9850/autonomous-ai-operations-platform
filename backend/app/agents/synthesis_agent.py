@@ -1,4 +1,5 @@
 from app.core.llm import get_planner_llm
+from app.tools.memory_tool import get_user_memories
 
 from app.tools.vector_memory import (
     store_memory,
@@ -29,6 +30,12 @@ def synthesis_agent(state):
         retrieved_memories
     )
 
+    memories = get_user_memories(
+    state["user_id"]
+    )
+
+    memory_context = "\n".join(memories)
+
     messages = [
 
         SystemMessage(
@@ -41,6 +48,9 @@ and conversational responses.
 Use previous conversation context naturally.
 
 Relevant Long-Term Memories:
+{memory_context}
+
+User Memories:
 {memory_context}
 
 Do NOT expose:

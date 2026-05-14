@@ -4,6 +4,7 @@ from fastapi import Depends
 from fastapi import Header
 from app.core.auth import decode_token
 from app.db.models import User
+from fastapi import HTTPException
 
 from app.db.database import SessionLocal
 from app.db.models import (
@@ -32,27 +33,54 @@ def get_current_user(
     db: Session = Depends(get_db)
 ):
 
-    token = authorization.replace(
-        "Bearer ",
-        ""
-    )
+    try:
 
-    payload = decode_token(token)
+        token = authorization.replace(
+            "Bearer ",
+            ""
+        )
 
-    user = db.query(User).filter(
-        User.id == payload["user_id"]
-    ).first()
+        payload = decode_token(token)
 
-    return user
+        if not payload:
+
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+        user = db.query(User).filter(
+            User.id == payload["user_id"]
+        ).first()
+
+        if not user:
+
+            raise HTTPException(
+                status_code=401,
+                detail="User not found"
+            )
+
+        return user
+
+    except Exception:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )
 
 
 
 
 @router.get("/chats")
 def get_chats(
+    
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
+    
 ):
+    
+
 
     chats = db.query(ChatSession).filter(
     ChatSession.user_id == current_user.id
@@ -126,9 +154,23 @@ def add_message(
 
     message_data: dict,
 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(get_current_user)
 
 ):
+
+    chat = db.query(ChatSession).filter(
+        ChatSession.id == chat_id,
+        ChatSession.user_id == current_user.id
+    ).first()
+
+    if not chat:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found"
+        )
 
     message = ChatMessage(
 
@@ -151,14 +193,17 @@ def add_message(
     }
 
 
+
 @router.delete("/chats/{chat_id}")
 def delete_chat(
     chat_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     chat = db.query(ChatSession).filter(
-        ChatSession.id == chat_id
+    ChatSession.id == chat_id,
+    ChatSession.user_id == current_user.id
     ).first()
 
     if chat:
@@ -177,12 +222,14 @@ def delete_chat(
 def update_chat(
     chat_id: int,
     data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
 
     chat = db.query(ChatSession).filter(
-        ChatSession.id == chat_id
-    ).first()
+    ChatSession.id == chat_id,
+    ChatSession.user_id == current_user.id
+).first()
 
     if not chat:
 

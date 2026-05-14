@@ -1,19 +1,26 @@
-from app.tools.memory_tool import remember
-from app.tools.memory_tool import recall
+from app.db.database import SessionLocal
+from app.db.models import Memory
 
 def memory_agent(state):
 
-    task = state["task"].lower()
+    db = SessionLocal()
 
-    if "remember" in task:
+    print(state)
 
-        result = remember(state["task"])
+    memory = Memory(
+        user_id=state["user_id"],
+        content=state["task"]
+    )
 
-    else:
+    db.add(memory)
 
-        result = recall(state["task"])
+    db.commit()
+
+    db.close()
 
     return {
         **state,
-        "results": [result]
+        "results": [
+            "Memory saved successfully"
+        ]
     }

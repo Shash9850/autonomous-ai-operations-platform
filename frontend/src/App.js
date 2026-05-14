@@ -40,7 +40,7 @@ function App() {
   const [chatSessions, setChatSessions] =
     useState([]);
 
-  const [activeChatId, setActiveChatId] =
+  const [currentChatId, setcurrentChatId] =
     useState(null);
 
   const [editingChatId, setEditingChatId] =
@@ -54,17 +54,12 @@ function App() {
 
   const bottomRef = useRef(null);
 
-  const token =
-    localStorage.getItem("token");
-
-  const authHeaders = {
-    Authorization: `Bearer ${token}`
-  };
+const abortControllerRef = useRef(null);
 
   const activeChat =
-    chatSessions.find(
-      chat => chat.id === activeChatId
-    ) || {
+  chatSessions.find(
+    chat => chat.id === currentChatId
+  ) || {
       messages: []
     };
 
@@ -76,6 +71,16 @@ function App() {
 
     const [isSpeaking, setIsSpeaking] =
     useState(false);
+
+     const [token, setToken] = useState(
+    localStorage.getItem("token")
+  );
+
+  const authHeaders = token
+    ? {
+        Authorization: `Bearer ${token}`
+      }
+    : {};
 
   const filteredChats = chatSessions
     .filter(chat =>
@@ -95,15 +100,34 @@ function App() {
 
     });
 
+
+    const stopGeneration = () => {
+
+  if (abortControllerRef.current) {
+
+    abortControllerRef.current.abort();
+
+    abortControllerRef.current = null;
+
+  }
+
+  speechSynthesis.cancel();
+
+  setLoading(false);
+
+  setIsSpeaking(false);
+
+};
   const updateActiveChatMessages = (
-    newMessages
-  ) => {
+  newMessages,
+  targetChatId = currentChatId
+) => {
 
-    setChatSessions(prev =>
+  setChatSessions(prev =>
 
-      prev.map(chat =>
+    prev.map(chat =>
 
-        chat.id === activeChatId
+      chat.id === targetChatId
           ? {
               ...chat,
               messages:
@@ -173,7 +197,8 @@ function App() {
           "token",
           response.data.token
         );
-
+        setToken(response.data.token);
+       
         setIsAuthenticated(true);
         setLoading(false);
 
@@ -186,9 +211,13 @@ function App() {
 
       }
 
-    } catch (error) {
+   } catch (error) {
 
-  console.error(error);
+  if (error.name !== "AbortError") {
+
+    console.error(error);
+
+  }
 
 } finally {
 
@@ -200,7 +229,10 @@ function App() {
 
   const loadChats = async () => {
 
+    if (!token) return;
+
     try {
+
 
       const response = await axios.get(
         "http://127.0.0.1:8000/chats",
@@ -211,9 +243,12 @@ function App() {
 
       setChatSessions(response.data);
 
-      if (response.data.length > 0) {
+if (
+  response.data &&
+  response.data.length > 0
+) {
 
-  setActiveChatId(
+  setcurrentChatId(
     response.data[0].id
   );
 
@@ -232,6 +267,7 @@ function App() {
   };
 
   const createNewChat = async () => {
+    if (!token) return;
 
     try {
 
@@ -242,13 +278,15 @@ function App() {
           pinned: false
         },
         {
-          headers: authHeaders
+          headers:{ Authorization:
+        `Bearer ${token}`
+}
         }
       );
 
       const newChat = {
         id: response.data.id,
-        title: "New Chat",
+        title: "AI Conversation",
         messages: [],
         pinned: false
       };
@@ -258,7 +296,7 @@ function App() {
         ...prev
       ]);
 
-      setActiveChatId(newChat.id);
+      setcurrentChatId(newChat.id);
 
     } catch (error) {
 
@@ -294,9 +332,9 @@ function App() {
 
   if (updatedChats.length > 0) {
 
-    if (activeChatId === chatId) {
+    if (currentChatId === chatId) {
 
-      setActiveChatId(
+      setcurrentChatId(
         updatedChats[0].id
       );
 
@@ -456,7 +494,41 @@ const startListening = () => {
 
   const streamTask = async () => {
 
-    if (!task.trim() || loading) return;
+  if (!task.trim() || loading || !token) return;
+
+   let chatId = currentChatId;
+
+if (!chatId) {
+
+  const response = await axios.post(
+    "http://127.0.0.1:8000/chats",
+    {
+      title: "AI Conversation",
+      pinned: false
+    },
+    {
+      headers: authHeaders
+    }
+  );
+
+  const newChat = {
+    id: response.data.id,
+    title: "AI Conversation",
+    messages: [],
+    pinned: false
+  };
+
+  setChatSessions(prev => [
+    newChat,
+    ...prev
+  ]);
+
+  setcurrentChatId(newChat.id);
+
+chatId = newChat.id;
+}
+
+    
 
     setLoading(true);
 
@@ -471,8 +543,9 @@ const startListening = () => {
     ];
 
     updateActiveChatMessages(
-      updatedMessages
-    );
+  updatedMessages,
+  chatId
+);
 
 
 
@@ -486,7 +559,7 @@ setChatSessions(prev =>
 
   prev.map(chat =>
 
-    chat.id === activeChatId &&
+    chat.id === chatId &&
     (
       chat.title === "New Chat" ||
       chat.title.trim() === ""
@@ -507,7 +580,7 @@ try {
 
   await axios.put(
 
-    `http://127.0.0.1:8000/chats/${activeChatId}`,
+    `http://127.0.0.1:8000/chats/${chatId}`,
 
     {
       title: generatedTitle
@@ -521,7 +594,11 @@ try {
 
 } catch (error) {
 
+  if (error.name !== "AbortError") {
+
   console.error(error);
+
+}
 
 }
 
@@ -530,7 +607,7 @@ try {
     try {
 
       await axios.post(
-        `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
+        `http://127.0.0.1:8000/chats/${chatId}/messages`,
         {
           role: "user",
           content: task
@@ -548,6 +625,8 @@ try {
 
     try {
 
+        abortControllerRef.current =
+  new AbortController();
       const response = await fetch(
         "http://127.0.0.1:8000/stream-task",
         {
@@ -557,6 +636,9 @@ try {
             Authorization:
               `Bearer ${token}`
           },
+
+          signal:
+  abortControllerRef.current.signal,
           body: JSON.stringify({
             task: task,
             chat_history: updatedMessages
@@ -582,7 +664,7 @@ updateActiveChatMessages(prev => [
     content: ""
   }
 
-]);
+], chatId);
 
       let streamedContent = "";
 
@@ -616,7 +698,7 @@ updateActiveChatMessages(prev => [
   try {
 
     await axios.post(
-      `http://127.0.0.1:8000/chats/${activeChatId}/messages`,
+      `http://127.0.0.1:8000/chats/${chatId}/messages`,
       {
         role: "assistant",
         content: streamedContent
@@ -696,7 +778,7 @@ speechSynthesis.speak(utterance);
 
     )
 
-  );
+  , chatId);
 
 }
 
@@ -727,7 +809,11 @@ speechSynthesis.speak(utterance);
 
     } catch (error) {
 
-  console.error(error);
+  if (error.name !== "AbortError") {
+
+    console.error(error);
+
+  }
 
 } finally {
 
@@ -739,26 +825,19 @@ speechSynthesis.speak(utterance);
 
   useEffect(() => {
 
-    const token =
-      localStorage.getItem("token");
+  setIsAuthenticated(!!token);
 
-    if (token) {
+}, [token]);
 
-      setIsAuthenticated(true);
+ useEffect(() => {
 
-    }
+  if (isAuthenticated && token) {
 
-  }, []);
+    loadChats();
 
-  useEffect(() => {
+  }
 
-    if (isAuthenticated) {
-
-      loadChats();
-
-    }
-
-  }, [isAuthenticated]);
+}, [isAuthenticated, token]);
 
   useEffect(() => {
 
@@ -863,12 +942,13 @@ speechSynthesis.speak(utterance);
            onClick={() => {
 
   localStorage.removeItem("token");
+  setToken(null);
   localStorage.removeItem("chatSessions");
   localStorage.removeItem("activeChatId");
 
   setChatSessions([]);
 
-  setActiveChatId(null);
+  setcurrentChatId(null);
 
   setResponse(null);
 
@@ -953,7 +1033,7 @@ speechSynthesis.speak(utterance);
               <div
                 key={chat.id}
                 className={`p-3 rounded-xl transition flex items-center justify-between ${
-                  activeChatId === chat.id
+                  currentChatId === chat.id
                     ? "bg-slate-700"
                     : "bg-slate-800 hover:bg-slate-700"
                 }`}
@@ -1015,7 +1095,7 @@ setEditingChatId(null);
                     <span
                       className="cursor-pointer flex-1"
                       onClick={() =>
-                        setActiveChatId(chat.id)
+                        setcurrentChatId(chat.id)
                       }
                     >
 
@@ -1318,7 +1398,7 @@ setEditingChatId(null);
                            "Content-Type":
       "multipart/form-data",
     Authorization:
-      `Bearer ${token}`
+  token ? `Bearer ${token}` : ""
                         }
                       }
                     );
@@ -1376,31 +1456,26 @@ setEditingChatId(null);
 
   </button>
 
-  {isSpeaking && (
+  {(loading || isSpeaking) && (
 
-    <button
+  <button
 
-      onClick={() => {
+    onClick={stopGeneration}
 
-        speechSynthesis.cancel();
+    className="bg-red-600 p-4 rounded-2xl hover:bg-red-500 transition"
+  >
 
-        setIsSpeaking(false);
+    Stop
 
-      }}
+  </button>
 
-      className="bg-red-600 p-4 rounded-2xl hover:bg-red-500 transition"
-    >
-
-      Stop
-
-    </button>
-
-  )}
+)}
 
 </div>
 
-          <button
-  disabled={loading}
+          {!loading && (
+
+<button
   onClick={streamTask}
             className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-500 transition"
           >
@@ -1408,6 +1483,8 @@ setEditingChatId(null);
             <FiSend size={20} />
 
           </button>
+
+)}
 
         </div>
 

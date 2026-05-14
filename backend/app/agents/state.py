@@ -14,3 +14,4 @@ class AgentState(TypedDict):
     report_path: str
     recipient_email: str
     chat_history: list
+    user_id: int

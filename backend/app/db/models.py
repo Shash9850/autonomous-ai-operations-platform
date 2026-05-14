@@ -72,3 +72,21 @@ class ChatMessage(Base):
         "ChatSession",
         back_populates="messages"
     )
+
+
+class Memory(Base):
+
+    __tablename__ = "memories"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id")
+    )
+
+    content = Column(Text)

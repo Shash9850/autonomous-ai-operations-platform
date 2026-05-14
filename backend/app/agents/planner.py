@@ -1,5 +1,8 @@
+from urllib import response
+
 from app.core.llm import get_planner_llm
 from app.agents.schema import Plan
+from app.agents import state
 
 def planner_agent(state):
     llm = get_planner_llm()
@@ -18,8 +21,10 @@ def planner_agent(state):
     response = structured_llm.invoke(prompt)
 
     return {
-        "task": state["task"],
-        "plan": response.steps,
-        "current_step": 0,
-        "results": []
-    }
+    **state,
+    "plan": response.steps,
+    "current_step": 0,
+    "results": []
+}
+
+   

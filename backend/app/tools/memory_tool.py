@@ -1,14 +1,50 @@
-from app.memory.long_memory import retrieve_memory
-from app.memory.long_memory import save_memory
 
-def remember(text: str):
+from app.db.database import SessionLocal
+from app.db.models import Memory
 
-    save_memory(text)
+def remember(user_id, content):
 
-    return "Memory saved"
+    db = SessionLocal()
 
-def recall(query: str):
+    memory = Memory(
+        user_id=user_id,
+        content=content
+    )
 
-    memories = retrieve_memory(query)
+    db.add(memory)
 
-    return "\n".join(memories)
+    db.commit()
+
+    db.close()
+
+    return "Memory saved successfully"
+
+def recall(user_id):
+
+    db = SessionLocal()
+
+    memories = db.query(Memory).filter(
+        Memory.user_id == user_id
+    ).all()
+
+    db.close()
+
+    return [
+        m.content
+        for m in memories
+    ]
+
+def get_user_memories(user_id):
+
+    db = SessionLocal()
+
+    memories = db.query(Memory).filter(
+        Memory.user_id == user_id
+    ).all()
+
+    db.close()
+
+    return [
+        m.content
+        for m in memories
+    ]
