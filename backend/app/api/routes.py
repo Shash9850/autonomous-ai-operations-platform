@@ -1,4 +1,4 @@
-
+import os
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from fastapi import UploadFile, File
@@ -139,6 +139,8 @@ async def stream_task(
 
 async def upload_document(file: UploadFile = File(...)):
 
+
+    os.makedirs("storage/docs", exist_ok=True)
     file_path = f"storage/docs/{file.filename}"
 
     with open(file_path, "wb") as buffer:

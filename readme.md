@@ -191,3 +191,39 @@ The goal of this project is to build a production-grade autonomous AI operations
 
 
 
+
+#changes that you should do before use
+
+create your own .env in backend folder
+
+
+GROQ_API_KEY=
+
+
+SECRET_KEY=SUPER_SECRET_KEY
+
+ALGORITHM=HS256
+
+EMAIL_USER=
+
+EMAIL_PASSWORD=
+
+
+DATABASE_URL=sqlite:///./app.db
+
+
+
+LANGCHAIN_API_KEY=
+
+LANGCHAIN_TRACING_V2=true
+
+LANGCHAIN_PROJECT=
+
+
+
+
+install all dependencies from requirement.txt
+
+
+
+
